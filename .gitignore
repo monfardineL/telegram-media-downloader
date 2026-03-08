@@ -1,0 +1,16 @@
+# Environment
+.env
+venv/
+env/
+
+# Telegram Session
+*.session
+
+# Downloads and tracking
+downloads/
+downloaded_ids.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
