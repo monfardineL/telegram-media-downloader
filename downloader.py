@@ -73,7 +73,8 @@ def parse_telegram_target(
     channel_url: Optional[str] = None,
     group_id: Optional[str] = None,
     topic_id: Optional[Any] = None,
-    start_msg_id: Optional[Any] = None
+    start_msg_id: Optional[Any] = None,
+    all_topics: bool = False
 ) -> Dict[str, Any]:
     """
     Parses channel URL and IDs to determine chat_id, topic_id, and starting_message_id.
@@ -122,8 +123,10 @@ def parse_telegram_target(
         else:
             target["chat_id"] = gid_str
 
-    # Explicit overrides
-    if topic_id is not None and str(topic_id).strip() != "":
+    # Topic ID override or all_topics reset
+    if all_topics or (topic_id is not None and str(topic_id).strip().lower() in ("all", "none", "*")):
+        target["topic_id"] = None
+    elif topic_id is not None and str(topic_id).strip() != "":
         try:
             target["topic_id"] = int(topic_id)
         except ValueError:
@@ -581,9 +584,10 @@ async def authenticate_if_needed(client: TelegramClient):
 
 async def main():
     parser = argparse.ArgumentParser(description="Download media from Telegram channel/topic sequentially.")
-    parser.add_argument("--channel", type=str, default=None, help="Telegram channel URL or ID (e.g. https://t.me/c/4345651366/2)")
+    parser.add_argument("--channel", type=str, default=None, help="Telegram channel URL or ID (e.g. https://t.me/c/4345651366)")
     parser.add_argument("--start-id", type=int, default=None, help="First message ID to download (inclusive)")
-    parser.add_argument("--topic-id", type=int, default=None, help="Forum topic ID to filter by")
+    parser.add_argument("--topic-id", type=str, default=None, help="Forum topic ID to filter by, or 'all' for all topics")
+    parser.add_argument("--all-topics", action="store_true", help="Download across all forum topics/sagas in the channel")
     parser.add_argument("--dest", type=str, default=None, help="Destination folder for downloads")
     parser.add_argument("--retry-failed", type=str, nargs="?", const="failed-media.list", default=None, help="Retry downloading messages from failed list file")
     args = parser.parse_args()
@@ -605,12 +609,14 @@ async def main():
     topic_input = args.topic_id if args.topic_id is not None else TOPIC_ID
     start_msg_input = args.start_id if args.start_id is not None else STARTING_MESSAGE_ID
     dest_dir = os.path.abspath(args.dest or DESTINATION_FOLDER)
+    use_all_topics = args.all_topics or (topic_input is not None and str(topic_input).strip().lower() in ("all", "none", "*"))
 
     target_info = parse_telegram_target(
         channel_url=channel_input,
         group_id=GROUP_ID,
         topic_id=topic_input,
-        start_msg_id=start_msg_input
+        start_msg_id=start_msg_input,
+        all_topics=use_all_topics
     )
 
     chat_id = target_info["chat_id"]
