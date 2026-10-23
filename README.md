@@ -1,66 +1,109 @@
-# Telegram Group Media Downloader
+# Telegram Media Downloader
 
-This is a simple, resilient Python script that uses the Telegram MTProto API (via the `Telethon` library) to authenticate your user account and automate downloading videos from a specific Telegram group or channel.
+A resilient, feature-rich Python tool to automate downloading media (videos, photos, documents, audio) from Telegram channels, supergroups, and forum topics one by one.
 
-It features:
-- Interactive group selection
-- Video-only filtering
-- Resumable downloads (keeps track of already downloaded files)
-- Original filename preservation (with fallback and collision handling)
+## Features
 
-## Prerequisites
+- **Sequential One-by-One Downloads**: Downloads files strictly one at a time to prevent bandwidth saturation and minimize Telegram rate limits.
+- **Telegram Limits & Rate Protection**: Automatic detection and handling of Telegram `FloodWaitError`, automatic re-fetching on expired file references, and exponential backoff retry logic.
+- **Download Integrity Guarantee**: Files are streamed into `.part` files, verified against Telegram's exact byte size metadata, and atomically committed to disk upon success. No partial or corrupted files.
+- **Sequential Numbering**: Prefixes files with zero-padded sequence numbers (e.g., `0001_filename.mp4`, `0002_filename.mp4`).
+- **Resilient Unicode & Encoding Sanitization**:
+  - Full Unicode NFC normalization (accents like `ã`, `é`, `ç` are properly precomposed).
+  - Removal of illegal filesystem characters (`/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|`, `\0`).
+  - Stripping of zero-width and bidirectional override formatting characters.
+  - Byte-safe filename truncation (staying safely within Linux ext4 255-byte limits).
+- **Forum Topics Support**: Automatically handles Telegram forum topics (`/c/<chat_id>/<topic_id>/<msg_id>`).
+- **Resumable State Manifest**: Uses a JSON manifest in the destination folder to remember sequence numbers and downloaded files. Interrupted downloads seamlessly pick up where they left off.
+- **Dedicated Authentication Tool**: Includes `auth.py` to check authentication status or log in via terminal.
 
-- Python 3.7+
-- A Telegram account
-- Your Telegram API credentials (`api_id` and `api_hash`)
-
-### Getting your Telegram API Credentials
-
-1. Go to [https://my.telegram.org](https://my.telegram.org) and log in with your phone number.
-2. Click on **"API development tools"**.
-3. Create a new application (you can enter anything for the App title and Short name).
-4. You will get an **`api_id`** (a number) and an **`api_hash`** (a string). Keep these safe!
+---
 
 ## Installation
 
-1. Clone or download this repository.
-2. (Optional but recommended) Create a virtual environment:
+1. Ensure Python 3.8+ is installed.
+2. Activate your virtual environment:
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate
    ```
-3. Install the required dependencies:
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
+---
+
 ## Configuration
 
-1. Copy the `.env.example` file to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-2. Open the `.env` file and fill in your details:
-   - `API_ID`: Your API ID from my.telegram.org
-   - `API_HASH`: Your API Hash from my.telegram.org
-   - `PHONE_NUMBER`: Your phone number (with country code, e.g., `+1234567890`). This helps the script log in automatically.
-   - `GROUP_ID` (Optional): If you know the exact ID of the group/channel, put it here. If left blank, the script will show you a list of your recent chats to pick from.
-   - `STARTING_MESSAGE_ID` (Optional): The ID of the message to start downloading *after*. If you want to download everything, leave this blank.
-   - `DESTINATION_FOLDER`: The folder where videos will be saved. Defaults to `./downloads`.
+Settings can be managed in `.env` or passed via CLI arguments:
+
+```env
+# Telegram API Credentials (from https://my.telegram.org/apps)
+API_ID=your_api_id
+API_HASH=your_api_hash
+PHONE_NUMBER=+1234567890
+
+# Target Channel and Topic
+CHANNEL_URL=https://t.me/c/4345651366/2
+GROUP_ID=-1004345651366
+TOPIC_ID=2
+
+# First message to download (inclusive)
+STARTING_MESSAGE_ID=16
+
+# Output folder
+DESTINATION_FOLDER=./downloads
+
+# Sequence numbering padding width (default: 4 -> 0001)
+SEQUENCE_PADDING=4
+
+# Media filter: all, or comma-separated: video, photo, document, audio
+MEDIA_TYPES=all
+
+# Delay in seconds between downloads
+DOWNLOAD_DELAY=1.5
+
+# Max retries per file
+MAX_RETRIES=5
+```
+
+---
+
+## Authentication
+
+Before running the downloader, make sure you are authenticated with Telegram.
+
+To check your login status:
+```bash
+./venv/bin/python auth.py --check
+```
+
+To log in:
+```bash
+./venv/bin/python auth.py
+```
+You will be prompted for your phone number, the verification code sent to your Telegram app, and your 2FA password (if enabled).
+
+---
 
 ## Usage
 
-Run the script:
-
+### 1. Run with `.env` settings
 ```bash
-python downloader.py
+./venv/bin/python downloader.py
 ```
 
-### First Run (Authentication)
-The first time you run the script, Telegram will send a login code to your Telegram app (or via SMS). The script will prompt you to enter this code in the terminal. Once entered, a file named `downloader.session` will be created locally. Subsequent runs will use this session file and won't require you to log in again.
+### 2. Override options on the command line
+```bash
+# Download starting at message 16 from a topic:
+./venv/bin/python downloader.py --channel https://t.me/c/4345651366/2 --start-id 16
 
-### Group Selection
-If you didn't provide a `GROUP_ID` in your `.env` file, the script will list your recent 20 groups/channels. You can simply type the number corresponding to the group you want to download from.
+# Specify custom destination:
+./venv/bin/python downloader.py --dest /path/to/my_downloads
+```
 
-### Resuming
-The script creates a `downloaded_ids.json` file to keep track of every message ID it has successfully downloaded. If you stop the script halfway through and run it again later, it will automatically skip any videos it has already downloaded.
+### 3. Retry Failed Downloads
+Any messages that fail all retry attempts are recorded in `failed-media.list`. You can re-attempt downloading them anytime:
+```bash
+./venv/bin/python downloader.py --retry-failed
+```

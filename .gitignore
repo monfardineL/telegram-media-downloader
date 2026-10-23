@@ -9,6 +9,9 @@ env/
 # Downloads and tracking
 downloads/
 downloaded_ids.json
+*.part
+failed-media.list
+failed.list
 
 # Python
 __pycache__/
